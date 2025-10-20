@@ -1,103 +1,197 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { LoadingMore } from "@/components/loading-more";
+import { LoadingSpinner } from "@/components/loading-spinner";
+import { PokemonCard } from "@/components/pokemon-card";
+import { PokemonGrid } from "@/components/pokemon-grid";
+import { SearchBar } from "@/components/search-bar";
+import { getAllPokemon } from "@/lib/pokemon-api";
+import { PokemonListItem } from "@/types/pokemon";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+const ITEMS_PER_PAGE = 200;
+
+export default function HomePage() {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [allPokemon, setAllPokemon] = useState<PokemonListItem[]>([]);
+  const [displayedPokemon, setDisplayedPokemon] = useState<PokemonListItem[]>(
+    []
+  );
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [selectedPokemon, setSelectedPokemon] =
+    useState<PokemonListItem | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const observerTarget = useRef<HTMLDivElement>(null);
+
+  // Load all Pokémon on initial render
+  useEffect(() => {
+    const loadAllPokemon = async () => {
+      try {
+        const data = await getAllPokemon();
+        setAllPokemon(data.results);
+        setDisplayedPokemon(data.results.slice(0, ITEMS_PER_PAGE));
+        setHasMore(data.results.length > ITEMS_PER_PAGE);
+      } catch (error) {
+        console.error("Error loading Pokémon:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadAllPokemon();
+  }, []);
+
+  // Handle search
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (searchQuery.trim()) {
+        const filtered = allPokemon.filter(
+          (pokemon) =>
+            pokemon.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            pokemon.id.toString() === searchQuery
+        );
+        setDisplayedPokemon(filtered.slice(0, ITEMS_PER_PAGE));
+        setCurrentPage(1);
+        setHasMore(filtered.length > ITEMS_PER_PAGE);
+      } else {
+        // Reset to show all when search is cleared
+        setDisplayedPokemon(allPokemon.slice(0, ITEMS_PER_PAGE));
+        setCurrentPage(1);
+        setHasMore(allPokemon.length > ITEMS_PER_PAGE);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, allPokemon]);
+
+  // Infinite scroll handler
+  const loadMorePokemon = useCallback(async () => {
+    if (searchQuery.trim() || loadingMore || !hasMore) return;
+
+    setLoadingMore(true);
+
+    try {
+      const nextPage = currentPage + 1;
+      const startIndex = 0;
+      const endIndex = nextPage * ITEMS_PER_PAGE;
+
+      const pokemonToDisplay = allPokemon.slice(startIndex, endIndex);
+      setDisplayedPokemon(pokemonToDisplay);
+      setCurrentPage(nextPage);
+
+      // Check if there are more to load
+      setHasMore(endIndex < allPokemon.length);
+    } catch (error) {
+      console.error("Error loading more Pokémon:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [allPokemon, currentPage, loadingMore, hasMore, searchQuery]);
+
+  // Intersection Observer for infinite scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0].isIntersecting &&
+          !loadingMore &&
+          !searchQuery.trim() &&
+          hasMore
+        ) {
+          loadMorePokemon();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (observerTarget.current) {
+      observer.observe(observerTarget.current);
+    }
+
+    return () => {
+      if (observerTarget.current) {
+        observer.unobserve(observerTarget.current);
+      }
+    };
+  }, [loadMorePokemon, loadingMore, searchQuery, hasMore]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+        <LoadingSpinner />
+      </div>
+    );
+  }
+
   return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+    <div className="min-h-screen bg-slate-200">
+      {/* Pokemon-style tricolor bar */}
+      <div
+        className="w-full h-6 sticky top-0 z-50 flex"
+        style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
+      >
+        <div className="flex-1" style={{ background: "#ee1515" }} />
+        <div className="flex-1" style={{ background: "#222" }} />
+        <div className="flex-1" style={{ background: "#fff" }} />
+      </div>
+      <div className="container mx-auto px-4 py-8">
+        <header className="text-center mb-12">
+          <h1 className="text-5xl font-bold text-gray-800 mb-4">
+            Pokémon Search
+          </h1>
+          <p className="text-gray-600 text-lg">
+            Discover your favorite Pokémon with detailed information
+          </p>
+        </header>
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+        <div className="max-w-2xl mx-auto mb-8">
+          <SearchBar
+            value={searchQuery}
+            onChange={setSearchQuery}
+            placeholder="Search by name or ID..."
+          />
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
+
+        {displayedPokemon.length > 0 && (
+          <>
+            <PokemonGrid
+              pokemon={displayedPokemon}
+              onSelect={setSelectedPokemon}
+            />
+
+            {/* Loading more indicator */}
+            {loadingMore && <LoadingMore />}
+
+            {/* Infinite scroll trigger */}
+            {!searchQuery.trim() && hasMore && !loadingMore && (
+              <div ref={observerTarget} className="h-10" />
+            )}
+
+            {/* End of results message */}
+            {!searchQuery.trim() && !hasMore && (
+              <div className="text-center py-8">
+                <p className="text-gray-500">
+                  You've reached the end! All Pokémon loaded.
+                </p>
+              </div>
+            )}
+          </>
+        )}
+
+        {searchQuery && displayedPokemon.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-gray-500 text-lg">No Pokémon found</p>
+          </div>
+        )}
+
+        {selectedPokemon && (
+          <PokemonCard
+            pokemon={selectedPokemon}
+            onClose={() => setSelectedPokemon(null)}
           />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+        )}
+      </div>
     </div>
   );
 }
